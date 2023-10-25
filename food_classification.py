@@ -255,15 +255,10 @@ plt.show()
 #==================================
 # CHECKING SIZE
 #==================================
-# # Initialize variables to store the reference values
-# reference_shape = (168, 300, 3)
-# reference_channels = 3
-# Initialize a flag to track uniformity
 uniform_shape = True
 # Initialize variables to store the reference shape
 reference_shape = None
 shape_distribution = []
-
 # Iterate through the subfolders (classes)
 for class_name in os.listdir(target_dataset_path):
     class_path = os.path.join(target_dataset_path, class_name)
