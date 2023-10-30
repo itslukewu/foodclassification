@@ -437,11 +437,17 @@ lr_scheduler = PwCD(boundaries=[30,50,80],values=[lr*0.1, lr*0.01, lr*0.001, lr*
 # opt = Adam(learning_rate=lr_scheduler, momentum=0.9)
 
 # Compile the model
-# model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-model.compile(optimizer='sgd', loss='categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+# model.compile(optimizer='sgd', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # Callbacks
 cbs = [ES(patience=10, restore_best_weights=True), MC(model_name+".h5", save_best_only=True)]
 
 # Training
 history = model.fit(train_ds, validation_data=val_ds, epochs=100, callbacks=cbs)
+
+# Evaluate the model on the testing dataset
+test_loss, test_accuracy = model.evaluate(test_ds)
+
+# Print the testing accuracy
+print(f'Testing accuracy: {test_accuracy}')

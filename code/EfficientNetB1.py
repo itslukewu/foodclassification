@@ -52,7 +52,7 @@ DROPOUT = 0.5
 n_classes = 14
 random_state = 123
 shuffle = True
-epochs = 100
+epochs = 50
 img_size = (224, 224)
 
 
@@ -451,7 +451,7 @@ model.compile(
     # loss='sparse_categorical_crossentropy',
     loss = 'categorical_crossentropy',
     # optimizer='adam',
-    optimizer='adam',
+    optimizer='sgd',
     metrics=['accuracy']
 )
 
@@ -459,4 +459,10 @@ model.compile(
 cbs = [ES(patience=100, restore_best_weights=True), MC(model_name+".h5", save_best_only=True)]
 
 # Training
-history = model.fit(train_ds, validation_data=val_ds, epochs=100, callbacks=cbs)
+history = model.fit(train_ds, validation_data=val_ds, epochs=50, callbacks=cbs)
+
+# Evaluate the model on the testing dataset
+test_loss, test_accuracy = model.evaluate(test_ds)
+
+# Print the testing accuracy
+print(f'Testing accuracy: {test_accuracy}')

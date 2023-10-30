@@ -450,9 +450,8 @@ lr_scheduler = PwCD(boundaries=[30,50,80],values=[lr*0.1, lr*0.01, lr*0.001, lr*
 model.compile(
     # loss='sparse_categorical_crossentropy',
     loss = 'categorical_crossentropy',
-    # optimizer='adam',
-    # optimizer='adam',
-    optimizer='sgd',
+    optimizer='adam',
+    # optimizer='sgd',
     metrics=['accuracy']
 )
 
@@ -461,3 +460,9 @@ cbs = [ES(patience=100, restore_best_weights=True), MC(model_name+".h5", save_be
 
 # Training
 history = model.fit(train_ds, validation_data=val_ds, epochs=100, callbacks=cbs)
+
+# Evaluate the model on the testing dataset
+test_loss, test_accuracy = model.evaluate(test_ds)
+
+# Print the testing accuracy
+print(f'Testing accuracy: {test_accuracy}')

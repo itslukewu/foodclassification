@@ -18,6 +18,7 @@ import tensorflow_hub as hub
 from sklearn.model_selection import train_test_split
 import shutil
 from tensorflow.keras.layers import *
+# import ipython
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Conv2D, Flatten, MaxPooling2D, AveragePooling2D
 from tensorflow.keras.optimizers import Adam
@@ -25,18 +26,31 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger
-from tensorflow.keras import regularizers
-print(tf.config.experimental.list_physical_devices('GPU'))
+# from tensorflow.keras import regularizers
+# from IPython.display import clear_output as cls
 
+# Data Loading
+from keras.preprocessing.image import ImageDataGenerator as IDG
+# Model
+from keras.models import Sequential
+from tensorflow_hub import KerasLayer as KL
+from keras.layers import Dense, InputLayer, Dropout
+
+# Optimizer
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers.schedules import PiecewiseConstantDecay as PwCD
+
+# Callbacks
+from keras.callbacks import EarlyStopping as ES, ModelCheckpoint as MC
+print(tf.config.experimental.list_physical_devices('GPU'))
 
 
 # Define paths
 root_folder = '/home/ubuntu/capstone/Food_Classification_dataset'
 #===============================hyper-parameter==========================================
-LR = 1e-3
 batch_size = 32
 DROPOUT = 0.5
-num_classes = 14
+n_classes = 14
 random_state = 123
 shuffle = True
 epochs = 50
@@ -409,24 +423,81 @@ validation_generator = val_datagen.flow_from_directory(
     class_mode='categorical'
 )
 
+from tensorflow.keras.applications import EfficientNetB3
 
+# Initialize the EffcientNetB3 model
+base_model = EfficientNetB3(input_shape=(224, 224, 3), include_top=False, weights='imagenet')
+
+# Set all layers in the base model to be non-trainable
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Model Architecture
+model_name = "EfficientNetB3"  # Replace with your desired model name
+model = Sequential([
+    InputLayer(input_shape=(224, 224, 3)),
+    base_model,
+    Flatten(),
+    Dropout(0.2),
+    Dense(n_classes, activation='softmax', kernel_initializer='zeros')
+], name=model_name)
+
+# Summary of the model
+model.summary()
+# Learning Rate Scheduler
+lr = 5e-3
+
+lr_scheduler = PwCD(boundaries=[30,50,80],values=[lr*0.1, lr*0.01, lr*0.001, lr*0.0001])
+# lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
+#                 monitor='val_accuracy',
+#                 factor=0.1,
+#                 patience=10,
+#                 verbose=1,
+#                 mode='max',
+#                 min_delta=0.0001,
+#                 min_lr=1e-7
+#              )
+
+
+# opt = SGD(learning_rate=lr_scheduler, momentum=0.9)
+
+# Compile
+model.compile(
+    # loss='sparse_categorical_crossentropy',
+    loss = 'categorical_crossentropy',
+    optimizer='adam',
+    # optimizer='sgd',
+    metrics=['accuracy']
+)
+
+# Callbacks
+cbs = [ES(patience=20, restore_best_weights=True), MC(model_name+".h5", save_best_only=True)]
+
+# Training
+history = model.fit(train_ds, validation_data=val_ds, epochs=50, callbacks=cbs)
+
+# Evaluate the model on the testing dataset
+test_loss, test_accuracy = model.evaluate(test_ds)
+
+# Print the testing accuracy
+print(f'Testing accuracy: {test_accuracy}')
 
 #==============================================================================
-model_path='/home/ubuntu/capstone/model/'
-# ModelCheckpoint callback
-model_checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(filepath=model_path,
-                                                      save_best_only=True,
-                                                      save_weights_only=True)
-# ReduceLROnPlateau callback
-lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(
-                monitor='val_accuracy',
-                factor=0.1,
-                patience=10,
-                verbose=1,
-                mode='max',
-                min_delta=0.0001,
-                min_lr=1e-7
-             )
+# model_path='/home/ubuntu/capstone/model/'
+# # ModelCheckpoint callback
+# model_checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(filepath=model_path,
+#                                                       save_best_only=True,
+#                                                       save_weights_only=True)
+# # ReduceLROnPlateau callback
+# lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(
+#                 monitor='val_accuracy',
+#                 factor=0.1,
+#                 patience=10,
+#                 verbose=1,
+#                 mode='max',
+#                 min_delta=0.0001,
+#                 min_lr=1e-7
+#              )
 
 
 # Load the pre-trained ResNet50 model
@@ -436,48 +507,48 @@ lr_schedule = tf.keras.callbacks.ReduceLROnPlateau(
 #     input_shape=(224, 224, 3),
 #     pooling='max'
 # )
-base_model = tf.keras.applications.efficientnet.EfficientNetB3(
-    weights='imagenet',
-    include_top=False,
-    input_shape=(224, 224, 3),
-    pooling='max'
-)
-# base_model.trainable = False
-base_model.trainable = True
-
-# Define additional layers
-flatten = tf.keras.layers.Flatten()
-# dense1 = tf.keras.layers.Dense(128, activation='relu')
-dense1 = tf.keras.layers.Dense(128, activation='softmax')
-dropout4 = tf.keras.layers.Dropout(0.4)
-
-# Build the model
-inputs = tf.keras.Input(shape=(224, 224, 3))
-x = base_model(inputs, training=False)
-x = flatten(x)
-x = dense1(x)
-x = dropout4(x)
-output = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
-model = tf.keras.Model(inputs=inputs, outputs=output)
-
-# Compile the model
-model.compile(
-    # optimizer=tf.keras.optimizers.SGD(learning_rate=0.0001, momentum=0.9),
-    optimizer='adam',
-    loss='categorical_crossentropy',
-    metrics=['accuracy','AUC'],
-    # class_weight=class_weight_dict,
-)
-
-# Train the model
-history = model.fit(
-    train_generator,
-    batch_size=batch_size,
-    epochs=epochs,
-    verbose=1,
-    validation_data=validation_generator,
-    callbacks=[lr_schedule, model_checkpoint_cb]
-)
+# base_model = tf.keras.applications.efficientnet.EfficientNetB3(
+#     weights='imagenet',
+#     include_top=False,
+#     input_shape=(224, 224, 3),
+#     pooling='max'
+# )
+# # base_model.trainable = False
+# base_model.trainable = True
+#
+# # Define additional layers
+# flatten = tf.keras.layers.Flatten()
+# # dense1 = tf.keras.layers.Dense(128, activation='relu')
+# dense1 = tf.keras.layers.Dense(128, activation='softmax')
+# dropout4 = tf.keras.layers.Dropout(0.4)
+#
+# # Build the model
+# inputs = tf.keras.Input(shape=(224, 224, 3))
+# x = base_model(inputs, training=False)
+# x = flatten(x)
+# x = dense1(x)
+# x = dropout4(x)
+# output = tf.keras.layers.Dense(num_classes, activation='softmax')(x)
+# model = tf.keras.Model(inputs=inputs, outputs=output)
+#
+# # Compile the model
+# model.compile(
+#     # optimizer=tf.keras.optimizers.SGD(learning_rate=0.0001, momentum=0.9),
+#     optimizer='adam',
+#     loss='categorical_crossentropy',
+#     metrics=['accuracy','AUC'],
+#     # class_weight=class_weight_dict,
+# )
+#
+# # Train the model
+# history = model.fit(
+#     train_generator,
+#     batch_size=batch_size,
+#     epochs=epochs,
+#     verbose=1,
+#     validation_data=validation_generator,
+#     callbacks=[lr_schedule, model_checkpoint_cb]
+# )
 # history = model.fit(
 #     train_generator,
 #     epochs=epochs,  # Specify the number of training epochs
