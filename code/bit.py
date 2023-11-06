@@ -52,7 +52,7 @@ DROPOUT = 0.5
 n_classes = 14
 random_state = 123
 shuffle = True
-epochs = 25
+epochs = 50
 img_size = (256, 256)
 
 
@@ -372,6 +372,10 @@ test_ds = tf.keras.utils.image_dataset_from_directory(
     color_mode='rgb'
 )
 
+# from skimage import exposure, img_as_ubyte
+# from skimage.filters import unsharp_mask
+# from skimage.restoration import denoise_tv_chambolle
+
 train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
     rescale=1.0 / 255.0,
     rotation_range=15,
@@ -409,20 +413,26 @@ url = "https://tfhub.dev/google/bit/m-r50x1/1"
 
 # Load Model
 bit = KL(url)
-
+from tensorflow.keras import regularizers
 # Model Name
 model_name = "Fast-Food-Classification-BiT"
+
 # Model Architecture
 model = Sequential([
     InputLayer(input_shape=(256, 256, 3)),
     bit,
-    Dropout(0.2),
+    BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001),
+    Dense(256, kernel_regularizer = regularizers.l2(l = 0.016),activity_regularizer=regularizers.l1(0.006), bias_regularizer=regularizers.l1(0.006) ,activation='relu'),
+    Dropout(0.3),
     Dense(n_classes, activation='softmax', kernel_initializer='zeros')
-    # Dense(n_classes, activation='relu', kernel_initializer='zeros')
 ], name=model_name)
+
+
+
 
 # Model Summary
 model.summary()
+
 
 # Learning Rate Scheduler
 lr = 5e-3
@@ -438,11 +448,6 @@ lr_scheduler = PwCD(boundaries=[30,50,80],values=[lr*0.1, lr*0.01, lr*0.001, lr*
 #                 min_lr=1e-7
 #              )
 
-
-# opt = SGD(learning_rate=lr_scheduler, momentum=0.9)
-
-
-
 # Compile
 model.compile(
     # loss='sparse_categorical_crossentropy',
@@ -456,7 +461,7 @@ model.compile(
 cbs = [ES(patience=5, restore_best_weights=True), MC(model_name+".h5", save_best_only=True)]
 
 # Training
-history = model.fit(train_ds, validation_data=val_ds, epochs=25, callbacks=cbs)
+history = model.fit(train_ds, validation_data=val_ds, epochs=50, callbacks=cbs)
 
 # Evaluate the model on the testing dataset
 test_loss, test_accuracy = model.evaluate(test_ds)
