@@ -52,7 +52,7 @@ DROPOUT = 0.5
 n_classes = 14
 random_state = 123
 shuffle = True
-epochs = 50
+epochs = 25
 img_size = (256, 256)
 
 
@@ -282,7 +282,7 @@ os.makedirs(val_path, exist_ok=True)
 # Loop through each food class
 for food_class in os.listdir(resized_img_path):
     class_folder = os.path.join(resized_img_path, food_class)
-
+    print(food_class)
     # Create subdirectories in train, test, and validation for the current class
     train_class_folder = os.path.join(train_path, food_class)
     test_class_folder = os.path.join(test_path, food_class)
@@ -372,18 +372,42 @@ test_ds = tf.keras.utils.image_dataset_from_directory(
     color_mode='rgb'
 )
 
-# from skimage import exposure, img_as_ubyte
-# from skimage.filters import unsharp_mask
-# from skimage.restoration import denoise_tv_chambolle
+from skimage import exposure, img_as_ubyte
+from skimage.filters import unsharp_mask
+from skimage.restoration import denoise_tv_chambolle
+# Function for contrast stretching
+def contrast_stretching(img):
+    p2, p98 = np.percentile(img, (2, 98))
+    return exposure.rescale_intensity(img, in_range=(p2, p98))
 
+# Function for noise reduction using Gaussian filtering
+def reduce_noise(img):
+    return denoise_tv_chambolle(img)
+
+# Function for sharpness enhancement using unsharp masking
+def enhance_sharpness(img):
+    return img_as_ubyte(unsharp_mask(img))
+
+# Combined preprocessing function
+def custom_preprocessing(img):
+    img = contrast_stretching(img)
+    # img = adjust_brightness()
+    img = reduce_noise(img)
+    img = enhance_sharpness(img)
+    return img
+
+# Setting up ImageDataGenerator with custom preprocessing functions
 train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
     rescale=1.0 / 255.0,
     rotation_range=15,
     width_shift_range=0.1,
     height_shift_range=0.1,
     horizontal_flip=True,
-    zoom_range=0.1
+    zoom_range=0.1,
+    brightness_range=[0.5, 1.5], # Example of adjusting brightness within a range
+    preprocessing_function=custom_preprocessing  # Combined custom preprocessing function
 )
+
 # Define data preprocessing for the validation set
 val_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
     rescale=1.0 / 255.0
@@ -418,7 +442,7 @@ from tensorflow.keras import regularizers
 model_name = "Fast-Food-Classification-BiT"
 
 # Model Architecture
-model = Sequential([
+model_bit = Sequential([
     InputLayer(input_shape=(256, 256, 3)),
     bit,
     BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001),
@@ -431,25 +455,16 @@ model = Sequential([
 
 
 # Model Summary
-model.summary()
+model_bit.summary()
 
 
 # Learning Rate Scheduler
 lr = 5e-3
 
 lr_scheduler = PwCD(boundaries=[30,50,80],values=[lr*0.1, lr*0.01, lr*0.001, lr*0.0001])
-# lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(
-#                 monitor='val_accuracy',
-#                 factor=0.1,
-#                 patience=10,
-#                 verbose=1,
-#                 mode='max',
-#                 min_delta=0.0001,
-#                 min_lr=1e-7
-#              )
 
 # Compile
-model.compile(
+model_bit.compile(
     # loss='sparse_categorical_crossentropy',
     loss = 'categorical_crossentropy',
     # optimizer='adam',
@@ -461,11 +476,102 @@ model.compile(
 cbs = [ES(patience=5, restore_best_weights=True), MC(model_name+".h5", save_best_only=True)]
 
 # Training
-history = model.fit(train_ds, validation_data=val_ds, epochs=50, callbacks=cbs)
+history = model_bit.fit(train_ds, validation_data=val_ds, epochs=25, callbacks=cbs)
 
 # Evaluate the model on the testing dataset
-test_loss, test_accuracy = model.evaluate(test_ds)
+test_loss, test_accuracy = model_bit.evaluate(test_ds)
 
 # Print the testing accuracy
 print(f'Testing accuracy: {test_accuracy}')
 
+
+from tensorflow.keras.preprocessing import image
+
+category = {
+    0: ['Hot Dog', 'Hot Dog'], 1: ['Sandwich', 'Sandwich'], 2: ['Donut', 'Donut'],
+    3: ['Crispy Chicken', 'Crispy Chicken'], 4: ['Taquito', 'Taquito'], 5: ['Taco', 'Taco'],
+    6: ['Fries', 'Fries'], 7: ['Baked Potato', 'Baked Potato'], 8: ['chicken_curry', 'Chicken Curry'],
+    9: ['cheesecake', 'Cheesecake'], 10: ['apple_pie', 'Apple Pie'], 11: ['sushi', 'Sushi'],
+    12: ['omelette', 'Omelette'], 13: ['ice_cream', 'Ice Cream']
+}
+
+
+# Load and preprocess the image
+online_img1_path = '/home/ubuntu/foodclassification/online_food_images/sandwich.png'
+online_img2_path = '/home/ubuntu/foodclassification/online_food_images/apple_pie.png'
+online_img3_path = '/home/ubuntu/foodclassification/online_food_images/cheesecake.png'
+online_img4_path = '/home/ubuntu/foodclassification/online_food_images/chicken_curry.png'
+online_img5_path = '/home/ubuntu/foodclassification/online_food_images/Donut.png'
+online_img6_path = '/home/ubuntu/foodclassification/online_food_images/Fries.png'
+online_img7_path = '/home/ubuntu/foodclassification/online_food_images/apple_pie1.png'
+online_img8_path = '/home/ubuntu/foodclassification/online_food_images/Hot Dog.png'
+online_img9_path = '/home/ubuntu/foodclassification/online_food_images/ice_cream.png'
+online_img10_path = '/home/ubuntu/foodclassification/online_food_images/sushi.png'
+online_img11_path = '/home/ubuntu/foodclassification/online_food_images/Taco.png'
+
+def predict_image(filename, model_bit):
+    img_ = image.load_img(filename, target_size=(256, 256))
+    img_array = image.img_to_array(img_)
+    img_processed = np.expand_dims(img_array, axis=0)
+    img_processed /= 255.
+
+    prediction = model_bit.predict(img_processed)
+    index = np.argmax(prediction)
+
+    plt.title("Prediction - {}".format(category[index][1]))
+    plt.imshow(img_)
+    # plt.title(f"Prediction - {index}")
+    plt.show()
+
+
+def predict_dir(filedir, model_bit):
+    cols = 5
+    pos = 0
+    images = []
+    total_images = len(os.listdir(filedir))
+    rows = total_images // cols + 1
+
+    true = filedir.split('/')[-1]
+
+    fig = plt.figure(1, figsize=(25, 25))
+
+    for i in sorted(os.listdir(filedir)):
+        images.append(os.path.join(filedir, i))
+
+    for subplot, imggg in enumerate(images):
+        img_ = image.load_img(imggg, target_size=(299, 299))
+        img_array = image.img_to_array(img_)
+
+        img_processed = np.expand_dims(img_array, axis=0)
+
+        img_processed /= 255.
+        prediction = model_bit.predict(img_processed)
+        index = np.argmax(prediction)
+
+        pred = category.get(index)[0]
+        if pred == true:
+            pos += 1
+
+        fig = plt.subplot(rows, cols, subplot + 1)
+        fig.set_title(category.get(index)[1], pad=10, size=18)
+        plt.imshow(img_array)
+        # plt.show()
+
+    acc = pos / total_images
+    print("Accuracy of Test : {:.2f} ({pos}/{total})".format(acc, pos=pos, total=total_images))
+    plt.tight_layout()
+
+# Assuming you have defined 'online_img_path' and 'model'
+predict_image(online_img1_path, model_bit)
+predict_image(online_img2_path, model_bit)
+predict_image(online_img3_path, model_bit)
+predict_image(online_img4_path, model_bit)
+predict_image(online_img5_path, model_bit)
+predict_image(online_img6_path, model_bit)
+predict_image(online_img7_path, model_bit)
+predict_image(online_img8_path, model_bit)
+predict_image(online_img9_path, model_bit)
+predict_image(online_img10_path, model_bit)
+predict_image(online_img11_path, model_bit)
+
+predict_dir("/home/ubuntu/foodclassification/online_food_images",model_bit)
